@@ -91,10 +91,26 @@ def manage_contacts():
     contacts = current_user.contacts.all()
     return jsonify({'contacts': [{'name': c.name, 'phone': c.phone} for c in contacts]})
 
-@bp.route('/api/zones')
-def get_zones():
+@bp.route('/api/zones', methods=['GET', 'POST'])
+def handle_zones():
+    if request.method == 'POST':
+        if not current_user.is_authenticated:
+            return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+            
+        data = request.json
+        zone = Zone(
+            lat=data['lat'], 
+            lon=data['lon'], 
+            type=data['type'], 
+            description=data.get('description', 'User Reported'),
+            reported_by=current_user.id
+        )
+        db.session.add(zone)
+        db.session.commit()
+        return jsonify({'status': 'success', 'id': zone.id})
+
     zones = Zone.query.all()
-    return jsonify([{'lat': z.lat, 'lon': z.lon, 'type': z.type} for z in zones])
+    return jsonify([{'lat': z.lat, 'lon': z.lon, 'type': z.type, 'desc': z.description} for z in zones])
 
 @bp.route('/map')
 @login_required

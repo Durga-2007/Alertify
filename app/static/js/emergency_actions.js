@@ -96,10 +96,41 @@ class EmergencySystem {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(position => {
                 this.initiateAutoCall(position.coords.latitude, position.coords.longitude);
+                this.initiateAutoSMS(position.coords.latitude, position.coords.longitude);
             });
         } else {
             // Fallback without location
             this.initiateAutoCall(0, 0);
+            this.initiateAutoSMS(0, 0);
+        }
+    }
+
+    async initiateAutoSMS(lat, lon) {
+        try {
+            const res = await fetch('/api/contacts');
+            const data = await res.json();
+            
+            if (data.contacts && data.contacts.length > 0) {
+                 const number = data.contacts[0].phone;
+                 const message = encodeURIComponent(`HELP! I am in danger! Location: https://maps.google.com/?q=${lat},${lon}`);
+                 
+                 console.log('Initiating SMS to:', number);
+                 
+                 // Create hidden link for SMS
+                 const link = document.createElement('a');
+                 link.href = `sms:${number}?body=${message}`;
+                 // Note: iOS uses '&' separator, Android uses '?'. '?' is safer for web standards usually but some devices differ.
+                 // link.href = `sms:${number}&body=${message}`; // iOS variant if needed
+                 
+                 link.style.display = 'none';
+                 document.body.appendChild(link);
+                 link.click();
+                 
+                 setTimeout(() => link.remove(), 1000);
+                 
+            }
+        } catch (err) {
+            console.error('Error initiating SMS:', err);
         }
     }
 

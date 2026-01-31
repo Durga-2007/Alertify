@@ -74,17 +74,52 @@ class AudioDetector {
 
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     if (event.results[i].isFinal) {
-                        const transcript = event.results[i][0].transcript.trim().toLowerCase();
-                        console.log('Heard:', transcript);
+                        const result = event.results[i][0];
+                        const transcript = result.transcript.trim().toLowerCase();
+                        const confidence = result.confidence;
 
-                        // Update UI
-                        transcriptDiv.innerHTML += `<div>> ${transcript}</div>`;
-                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+                        console.log(`Heard: "${transcript}" (Confidence: ${confidence})`);
 
-                        if (transcript.includes(this.targetKeyword.toLowerCase())) {
+                        // Update UI - ONLY show if we are matching or debugging
+                        // transcriptDiv.innerHTML += `<div>> ${transcript} <small class="text-muted">(${Math.round(confidence*100)}%)</small></div>`;
+                        // transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+
+                        // Strict Keyword Matching
+
+                        // 0. Validate Keyword
+                        if (!this.targetKeyword || this.targetKeyword.trim().length < 2) {
+                            console.warn("Target keyword too short or empty. Ignoring.");
+                            continue;
+                        }
+
+                        // 1. Check Confidence (if supported)
+                        // Note: Some browsers return 0 for confidence, so we treat 0 as "check failed" if we want strictness,
+                        // OR we only check if it is > 0. But often 0 means "I tried". 
+                        // Let's assume if confidence exists (> 0), we check threshold. 
+                        if (typeof confidence !== 'undefined' && confidence > 0 && confidence < 0.85) {
+                            console.log(`Ignored low confidence match (${confidence})`);
+                            transcriptDiv.innerHTML += `<div class="text-muted small">Ignored (Low Confidence)</div>`;
+                            continue;
+                        }
+
+                        // 2. Word Boundary Check
+                        const escapedKeyword = this.targetKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+                        const keywordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+
+                        if (keywordRegex.test(transcript)) {
                             console.warn('KEYWORD MATCHED:', this.targetKeyword);
                             transcriptDiv.innerHTML += `<div class="text-danger fw-bold">MATCHED: ${this.targetKeyword}</div>`;
+
+                            // Double check: Stop listening immediately to prevent multi-trigger
+                            this.stopListening();
                             this.emergencySystem.triggerEmergency('keyword_match');
+
+                            // Restart listening logic is handled by Emergency System if needed, or by user toggle
+                            // But usually once emergency triggers, we might want to keep listing? 
+                            // user said "refresh pannuna poiruthu", implying they want persistent state.
+                            // But for Trigger, we fire once.
+                        } else {
+                            console.log(`Transcript '${transcript}' did not match keyword '${this.targetKeyword}'`);
                         }
                     }
                 }
