@@ -147,8 +147,14 @@ class AudioDetector {
     }
 
     updateKeyword(word) {
-        this.targetKeyword = word;
+        const oldKeyword = this.targetKeyword;
+        this.targetKeyword = word.toLowerCase();
         console.log('Keyword updated to:', this.targetKeyword);
+
+        // If it changed while listening, we might need to reset recognition
+        if (this.isListening && oldKeyword !== this.targetKeyword) {
+            this.recognition.stop();
+        }
     }
 
     async startListening() {
