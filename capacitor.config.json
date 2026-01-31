@@ -1,0 +1,6 @@
+{
+  "appId": "com.alertify.app",
+  "appName": "Alertify",
+  "webDir": "app/static",
+  "bundledWebRuntime": false
+}
