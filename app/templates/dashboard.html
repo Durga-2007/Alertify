@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center">
+        <h2>Safety Mode</h2>
+        <div class="safety-toggle-container">
+            <button id="safetyToggle" class="safety-btn">
+                OFF
+            </button>
+        </div>
+        <p class="text-muted" id="statusText">Tap to activate Emergency Monitoring</p>
+
+        <div class="card mt-3 mx-auto" style="max-width: 400px;">
+            <div class="card-body">
+                <label class="form-label">Emergency Keyword</label>
+                <div class="input-group">
+                    <input type="text" id="customKeyword" class="form-control" placeholder="e.g. Help, Save Me"
+                        value="Help">
+                    <button class="btn btn-outline-primary" id="saveKeywordBtn">Save</button>
+                </div>
+                <small class="text-muted">Say this word to trigger SOS when active.</small>
+
+                <hr>
+                <label class="form-label">Live Diagnostics</label>
+                <!-- Volume Meter -->
+                <div class="mb-2">
+                    <small>Microphone Volume:</small>
+                    <div class="progress" style="height: 10px;">
+                        <div id="micVolume" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="alert alert-secondary" style="height: 100px; overflow-y: auto; font-family: monospace;"
+                    id="liveTranscript">
+                    (Waiting for audio...)
+                </div>
+                <button class="btn btn-sm btn-outline-danger w-100 mt-2"
+                    onclick="emergencySystem.triggerEmergency('manual_test')">
+                    Force Trigger SOS (Test Actions)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">Feature Status</div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        GPS Tracking
+                        <span class="badge bg-secondary" id="gpsStatus">Inactive</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Audio Monitoring
+                        <span class="badge bg-secondary" id="audioStatus">Inactive</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Camera Access
+                        <span class="badge bg-secondary" id="cameraStatus">Inactive</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-danger text-white">Emergency Contacts</div>
+            <div class="card-body">
+                <div id="contactsList">
+                    <!-- Loaded via JS -->
+                </div>
+                <button class="btn btn-outline-danger w-100 mt-2" data-bs-toggle="modal"
+                    data-bs-target="#addContactModal">
+                    <i class="bi bi-person-plus"></i> Add Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Contact Modal -->
+<div class="modal fade" id="addContactModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Emergency Contact</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addContactForm">
+                    <div class="mb-3">
+                        <label>Name</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Phone</label>
+                        <input type="tel" class="form-control" name="phone" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Email</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/emergency_actions.js') }}"></script>
+<script src="{{ url_for('static', filename='js/audio_detection.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

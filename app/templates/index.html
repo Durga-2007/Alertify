@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 hero-section">
+        <h1 class="display-3 fw-bold">SafeGuard</h1>
+        <p class="lead">Your AI-Powered Personal Safety Companion</p>
+        <p>Offline Voice Detection • Auto-Alerts • Live Location</p>
+
+        <div class="mt-4">
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary btn-lg">Go to Dashboard</a>
+            {% else %}
+            <a href="{{ url_for('main.login') }}" class="btn btn-primary btn-lg me-2">Login</a>
+            <a href="{{ url_for('main.register') }}" class="btn btn-outline-secondary btn-lg">Register</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5 text-center">
+    <div class="col-md-4">
+        <div class="card p-4">
+            <i class="bi bi-mic-fill display-4 text-primary mb-3"></i>
+            <h3>Voice Detection</h3>
+            <p>Automatically detects screams or help keywords.</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-4">
+            <i class="bi bi-broadcast display-4 text-danger mb-3"></i>
+            <h3>Instant Alerts</h3>
+            <p>Sends location and photos to contacts instantly.</p>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card p-4">
+            <i class="bi bi-wifi-off display-4 text-success mb-3"></i>
+            <h3>Offline Mode</h3>
+            <p>Works without internet, syncing when you reconnect.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

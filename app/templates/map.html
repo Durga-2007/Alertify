@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Safety Map</h2>
+        <div id="map"
+            style="height: 500px; background-color: #e9ecef; display: flex; align-items: center; justify-content: center;">
+            <p class="text-muted">Map Integration (Google Maps/Leaflet) would go here.</p>
+            <!-- 
+                Ideally, you would use Leaflet.js here:
+                <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+                <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+            -->
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-12">
+        <button class="btn btn-warning" onclick="reportUnsafeArea()">
+            <i class="bi bi-exclamation-triangle"></i> Report Unsafe Area
+        </button>
+        <button class="btn btn-success" onclick="markSafeZone()">
+            <i class="bi bi-check-circle"></i> Mark Safe Zone
+        </button>
+    </div>
+</div>
+
+<script>
+    function reportUnsafeArea() {
+        if (confirm("Report current location as unsafe?")) {
+            // Logic to send coordinates to backend
+            alert("Location reported. Points added!");
+        }
+    }
+    function markSafeZone() {
+        // Logic
+        alert("Safe zone marked.");
+    }
+</script>
+{% endblock %}
