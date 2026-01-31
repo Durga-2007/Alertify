@@ -45,3 +45,10 @@ class Zone(db.Model):
     type = db.Column(db.String(10)) # 'safe' or 'unsafe'
     description = db.Column(db.String(140))
     reported_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+class EvidenceLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    filename = db.Column(db.String(255))
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    type = db.Column(db.String(20)) # 'video', 'audio', 'image'
