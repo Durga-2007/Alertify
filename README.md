@@ -48,3 +48,4 @@ The app is designed to be **unobtrusive**. Once permissions are granted, monitor
 Developed with ❤️ by Durga | [Alertify GitHub Repository](https://github.com/Durga-2007/Alertify.git)
 
 
+
