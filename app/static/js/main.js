@@ -24,21 +24,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const sosBtn = document.getElementById('sosBtn');
     if (sosBtn) {
         sosBtn.addEventListener('click', () => {
-            // Direct Trigger without confirmation
-            // 1. Send SMS / Alert
+            // Standardize on centralized trigger
             emergencySystem.triggerEmergency('manual_sos_button');
 
-            // 2. Turn ON Microphone (Recording/Listening)
-            audioDetector.startListening();
-
-            // 3. Turn ON GPS Tracking
-            emergencySystem.startTracking();
-
-            // 4. Start Evidence Recording (Video/Audio)
-            emergencySystem.startRecording();
-
-            // Update Status Text
-            statusText.innerText = 'SOS ACTIVE! Recording Audio & Video...';
+            // UI Feedback
+            statusText.innerText = 'SOS ACTIVE! Sending Alerts & Recording...';
             statusText.classList.add('text-danger', 'fw-bold');
         });
     }
@@ -57,6 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // Start Systems
             emergencySystem.startTracking();
             audioDetector.startListening();
+
+            // Pre-Warm Camera/Mic so emergency recording is instant and silent later
+            emergencySystem.preWarmPermissions();
 
             // NOTE: We do NOT trigger emergency here automatically anymore.
             // The user wants: 
@@ -98,16 +91,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- AUTOMATIC ACTIVATION ---
-    // Start Monitoring & Tracking immediately on load
-    console.log("🛠️ System: Initiating Automatic Protection...");
+    // --- ROBUST ACTIVATION ---
+    // Browsers block Mic/Camera if the user hasn't clicked anything.
+    // We try auto-click, but if it fails or doesn't start, we prompt the user.
+    console.log("🛠️ System: Initiating Protection Seq...");
+
+    const startProtection = () => {
+        if (!window.safetyModeActive) {
+            console.log("🛡️ Protection: Starting via User Interaction...");
+            safetyToggle.click(); // This will now run in a real Click event or the timeout
+            const transcriptDiv = document.getElementById('liveTranscript');
+            if (transcriptDiv) {
+                transcriptDiv.innerHTML += `<div class="text-primary fw-bold">🛡️ AUTO-PROTECT: System Armed.</div>`;
+            }
+        }
+        // Remove listener after first interaction
+        document.removeEventListener('click', startProtection);
+    };
+
+    // Try auto-click after 1s
     setTimeout(() => {
         if (!window.safetyModeActive) {
-            safetyToggle.click(); // Programmatically trigger the toggle
-            const transcriptDiv = document.getElementById('liveTranscript');
-            if (transcriptDiv) transcriptDiv.innerHTML += `<div class="text-primary fw-bold">🛡️ AUTO-PROTECT: Monitoring Active.</div>`;
+            safetyToggle.click();
+            // If it still didn't start (browser blocked it), add a page-wide click listener
+            setTimeout(() => {
+                if (!window.safetyModeActive) {
+                    console.warn("⚠️ System: Browser blocked auto-start. Waiting for any user click...");
+                    statusText.innerHTML = '<span class="text-warning fw-bold"><i class="bi bi-hand-index-thumb"></i> CLICK ANYWHERE to arm security</span>';
+                    document.addEventListener('click', startProtection);
+                }
+            }, 500);
         }
-    }, 1000); // Small delay to ensure all systems are ready
+    }, 1000);
 });
 
 async function loadContacts() {

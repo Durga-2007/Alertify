@@ -7,6 +7,8 @@ class AudioDetector {
         this.audioContext = null; // For volume meter
         this.mediaStream = null;
 
+        this.matchCount = 0;
+        this.lastMatchTime = 0;
         this.initSpeechRecognition();
     }
 
@@ -15,10 +17,6 @@ class AudioDetector {
             if (!this.audioContext) {
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
-            // Reuse stream if possible or get new one. 
-            // Note: SpeechRecognition usually manages its own stream. We might need a separate one or try to hook into it (hard).
-            // Simplest is to request user media for "loud noise" visualization separately.
-
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             this.mediaStream = stream;
 
@@ -30,34 +28,23 @@ class AudioDetector {
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
             const updateMeter = () => {
-                if (!this.isListening) return; // Stop if not listening
-
+                if (!this.isListening) return;
                 analyser.getByteFrequencyData(dataArray);
                 let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
+                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
                 const average = sum / dataArray.length;
-
-                // Update UI (scale 0-255 to 0-100%)
                 const volElement = document.getElementById('micVolume');
                 if (volElement) {
                     volElement.style.width = Math.min(100, (average * 2)) + '%';
-
                     if (average > 5 && volElement.classList.contains('bg-danger')) {
-                        // Reset color if receiving input
                         volElement.className = 'progress-bar bg-success';
                     }
                 }
-
                 requestAnimationFrame(updateMeter);
             };
             updateMeter();
-
         } catch (e) {
             console.error('Volume meter init failed', e);
-            const transcriptDiv = document.getElementById('liveTranscript');
-            if (transcriptDiv) transcriptDiv.innerHTML += `<div class="text-warning">⚠️ Visualizer Error: ${e.message}</div>`;
         }
     }
 
@@ -80,46 +67,48 @@ class AudioDetector {
 
                         console.log(`Heard: "${transcript}" (Confidence: ${confidence})`);
 
-                        // Update UI - ONLY show if we are matching or debugging
-                        // transcriptDiv.innerHTML += `<div>> ${transcript} <small class="text-muted">(${Math.round(confidence*100)}%)</small></div>`;
-                        // transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
-
-                        // Strict Keyword Matching
+                        // Update UI - Show what is heard
+                        transcriptDiv.innerHTML += `<div>> ${transcript} <small class="text-muted">(${Math.round(confidence * 100)}%)</small></div>`;
+                        transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
 
                         // 0. Validate Keyword
-                        if (!this.targetKeyword || this.targetKeyword.trim().length < 2) {
-                            console.warn("Target keyword too short or empty. Ignoring.");
-                            continue;
-                        }
+                        if (!this.targetKeyword || this.targetKeyword.trim().length < 2) continue;
 
-                        // 1. Check Confidence (if supported)
-                        // Note: Some browsers return 0 for confidence, so we treat 0 as "check failed" if we want strictness,
-                        // OR we only check if it is > 0. But often 0 means "I tried". 
-                        // Let's assume if confidence exists (> 0), we check threshold. 
-                        if (typeof confidence !== 'undefined' && confidence > 0 && confidence < 0.85) {
-                            console.log(`Ignored low confidence match (${confidence})`);
-                            transcriptDiv.innerHTML += `<div class="text-muted small">Ignored (Low Confidence)</div>`;
-                            continue;
-                        }
+                        // 1. Check Confidence (STRICT: 0.85)
+                        const isHighConfidence = confidence >= 0.85;
 
                         // 2. Word Boundary Check
-                        const escapedKeyword = this.targetKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape regex chars
+                        const escapedKeyword = this.targetKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         const keywordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
 
                         if (keywordRegex.test(transcript)) {
-                            console.warn('KEYWORD MATCHED:', this.targetKeyword);
-                            transcriptDiv.innerHTML += `<div class="text-danger fw-bold">MATCHED: ${this.targetKeyword}</div>`;
+                            const now = Date.now();
 
-                            // Double check: Stop listening immediately to prevent multi-trigger
-                            this.stopListening();
-                            this.emergencySystem.triggerEmergency('keyword_match');
+                            if (isHighConfidence) {
+                                // CASE A: HIGH CONFIDENCE MATCH -> TRIGGER IMMEDIATELY
+                                console.warn('CONFIRMED MATCH (High Confidence):', this.targetKeyword);
+                                transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED: ${this.targetKeyword.toUpperCase()}</div>`;
+                                this.stopListening(true);
+                                this.emergencySystem.triggerEmergency('voice_keyword_confirmed');
+                            } else {
+                                // CASE B: LOW CONFIDENCE -> REQUIRE SECOND MATCH WITHIN 10 SECONDS
+                                if (now - this.lastMatchTime < 10000) {
+                                    this.matchCount++;
+                                } else {
+                                    this.matchCount = 1;
+                                }
+                                this.lastMatchTime = now;
 
-                            // Restart listening logic is handled by Emergency System if needed, or by user toggle
-                            // But usually once emergency triggers, we might want to keep listing? 
-                            // user said "refresh pannuna poiruthu", implying they want persistent state.
-                            // But for Trigger, we fire once.
-                        } else {
-                            console.log(`Transcript '${transcript}' did not match keyword '${this.targetKeyword}'`);
+                                if (this.matchCount >= 2) {
+                                    console.warn('CONFIRMED MATCH (Double Match):', this.targetKeyword);
+                                    transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED (2nd Match): ${this.targetKeyword.toUpperCase()}</div>`;
+                                    this.stopListening(true);
+                                    this.emergencySystem.triggerEmergency('voice_keyword_confirmed_double');
+                                } else {
+                                    console.log('SUSPICIOUS: Keyword detected once (low confidence). Waiting for second match...');
+                                    transcriptDiv.innerHTML += `<div class="text-warning small italic">Suspicious... say "${this.targetKeyword}" again to confirm.</div>`;
+                                }
+                            }
                         }
                     }
                 }
@@ -185,13 +174,17 @@ class AudioDetector {
         // We will stick to just SpeechRecognition for this "Custom Keyword" tasks, as it covers the requirement.
     }
 
-    stopListening() {
+    stopListening(immediate = false) {
         this.isListening = false;
         document.getElementById('audioStatus').textContent = 'Inactive';
         document.getElementById('audioStatus').className = 'badge bg-secondary';
 
         if (this.recognition) {
-            this.recognition.stop();
+            if (immediate) {
+                this.recognition.abort(); // Hard stop
+            } else {
+                this.recognition.stop();
+            }
         }
     }
 }

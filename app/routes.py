@@ -2,7 +2,8 @@ import os
 from datetime import datetime
 from flask import Blueprint, render_template, flash, redirect, url_for, request, jsonify, current_app
 from flask_login import current_user, login_user, logout_user, login_required
-from app import db
+from app import db, mail
+from flask_mail import Message
 from app.models import User, Contact, EmergencyLog, Zone, EvidenceLog
 
 
@@ -54,11 +55,16 @@ def register():
 @login_required
 def trigger_emergency():
     data = request.json
-    log = EmergencyLog(user_id=current_user.id, location=data.get('location'), trigger_type=data.get('type'))
+    trigger_type = data.get('type', 'manual')
+    log = EmergencyLog(user_id=current_user.id, location=data.get('location'), trigger_type=trigger_type)
     db.session.add(log)
     db.session.commit()
     
     # --- AUTOMATIC SERVER-SIDE SMS (REAL TWILIO) ---
+    # FILTER: Do not send SMS for periodic location updates
+    if trigger_type == 'periodic_update':
+        return jsonify({'status': 'success', 'message': 'Location updated (no SMS)'})
+
     from flask import current_app
     from twilio.rest import Client
     
@@ -69,35 +75,56 @@ def trigger_emergency():
     sms_sent_count = 0
     contacts = current_user.contacts.all()
     
-    print("\n" + "!" * 60)
-    print(f"🔥 SOS ALERT: ATTEMPTING DELIVERY")
-    
-    if account_sid and auth_token and from_number:
-        try:
-            client = Client(account_sid, auth_token)
-            for contact in contacts:
-                phone = contact.phone.strip()
-                if phone.startswith('0'): phone = '+91' + phone[1:]
-                elif len(phone) == 10 and phone.isdigit(): phone = '+91' + phone
-                elif not phone.startswith('+'): phone = '+' + phone
+    # Persistent Debug Logging to File
+    with open('sos.log', 'a') as f:
+        f.write(f"\n--- {datetime.now()} ---\n")
+        f.write(f"TRIGGER: {trigger_type} | USER: {current_user.username}\n")
+        f.write(f"LOCATION: {data.get('location')}\n")
+        f.write(f"CONTACTS: {len(contacts)}\n")
 
-                print(f"🚀 [TWILIO] SENDING to: {phone}")
-                try:
-                    message = client.messages.create(
-                        body=f"ALERT! {current_user.username} SOS. Location: https://maps.google.com/?q={data.get('location')}",
-                        from_=from_number,
-                        to=phone
-                    )
-                    print(f"✅ [TWILIO SUCCESS] SID: {message.sid}")
-                    sms_sent_count += 1
-                except Exception as inner_e:
-                    print(f"❌ [TWILIO ERROR] {phone}: {str(inner_e)}")
-        except Exception as e:
-            print(f"❌ [TWILIO CLIENT ERROR] {str(e)}")
-    else:
-        print("⚠️ [CONFIG] Twilio keys missing in .env")
-            
-    print("!" * 60 + "\n")
+        if account_sid and auth_token and from_number:
+            try:
+                client = Client(account_sid, auth_token)
+                for contact in contacts:
+                    phone = contact.phone.strip()
+                    norm_phone = phone
+                    if phone.startswith('0'): norm_phone = '+91' + phone[1:]
+                    elif len(phone) == 10 and phone.isdigit(): norm_phone = '+91' + phone
+                    elif not phone.startswith('+'): norm_phone = '+' + phone
+
+                    # 1. SEND SMS
+                    try:
+                        message = client.messages.create(
+                            body=f"ALERT! {current_user.username} SOS. Location: https://maps.google.com/?q={data.get('location', 'Unknown')}",
+                            from_=from_number,
+                            to=norm_phone
+                        )
+                        sms_sent_count += 1
+                        f.write(f"SMS SUCCESS: {norm_phone} (SID: {message.sid})\n")
+                    except Exception as inner_e:
+                        f.write(f"SMS ERROR: {norm_phone} ({str(inner_e)})\n")
+                        print(f"❌ [TWILIO ERROR] {norm_phone}: {str(inner_e)}")
+
+                    # 2. SEND EMAIL
+                    if contact.email:
+                        try:
+                            msg = Message(
+                                subject=f"EMERGENCY SOS: {current_user.username}",
+                                recipients=[contact.email],
+                                body=f"I need help! My location: https://maps.google.com/?q={data.get('location', 'Unknown')}\n\nThis is an automated emergency alert from SafeGuard."
+                            )
+                            mail.send(msg)
+                            f.write(f"EMAIL SUCCESS: {contact.email}\n")
+                        except Exception as m_e:
+                            f.write(f"EMAIL ERROR: {contact.email} ({str(m_e)})\n")
+                            print(f"❌ [MAIL ERROR] {contact.email}: {str(m_e)}")
+
+            except Exception as e:
+                f.write(f"CLIENT ERROR: {str(e)}\n")
+                print(f"❌ [ALERT CLIENT ERROR] {str(e)}")
+        else:
+            f.write("CONFIG ERROR: Twilio/Mail keys missing in .env\n")
+    
     # --------------------------------
     
     return jsonify({
