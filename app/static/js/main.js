@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadContacts();
 
     // Keyword Logic
-    const savedKeyword = localStorage.getItem('emergencyKeyword') || 'help';
+    const savedKeyword = localStorage.getItem('emergencyKeyword') || 'mathew';
     document.getElementById('customKeyword').value = savedKeyword;
     audioDetector.updateKeyword(savedKeyword);
 

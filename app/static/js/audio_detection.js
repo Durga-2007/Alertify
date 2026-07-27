@@ -1,9 +1,106 @@
+// --- UTILITY FUZZY MATCHING FUNCTIONS ---
+
+function levenshtein(s1, s2) {
+    const track = Array(s2.length + 1).fill(null).map(() =>
+        Array(s1.length + 1).fill(null));
+    for (let i = 0; i <= s1.length; i += 1) {
+        track[0][i] = i;
+    }
+    for (let j = 0; j <= s2.length; j += 1) {
+        track[j][0] = j;
+    }
+    for (let j = 1; j <= s2.length; j += 1) {
+        for (let i = 1; i <= s1.length; i += 1) {
+            const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+            track[j][i] = Math.min(
+                track[j][i - 1] + 1, // deletion
+                track[j - 1][i] + 1, // insertion
+                track[j - 1][i - 1] + indicator // substitution
+            );
+        }
+    }
+    return track[s2.length][s1.length];
+}
+
+function getSoundex(word) {
+    if (!word) return "";
+    const a = word.toLowerCase().replace(/[^a-z]/g, '').split('');
+    if (a.length === 0) return "";
+    const first = a.shift();
+    const codes = {
+        a: '', e: '', i: '', o: '', u: '', y: '', h: '', w: '',
+        b: '1', f: '1', p: '1', v: '1',
+        c: '2', g: '2', j: '2', k: '2', q: '2', s: '2', x: '2', z: '2',
+        d: '3', t: '3',
+        l: '4',
+        m: '5', n: '5',
+        r: '6'
+    };
+    
+    let result = first + a.map(char => codes[char] || '').join('');
+    
+    // Remove adjacent duplicates
+    result = result.replace(/(.)\1+/g, '$1');
+    
+    // Pad or truncate to 4 chars
+    return (result + '0000').substring(0, 4).toUpperCase();
+}
+
+function isFuzzyMatch(transcript, targetKeyword) {
+    const cleanTranscript = transcript.toLowerCase().trim();
+    const cleanKeyword = targetKeyword.toLowerCase().trim();
+    
+    // 1. Direct substring check (fast path)
+    if (cleanTranscript.includes(cleanKeyword)) {
+        return { matched: true, reason: 'exact' };
+    }
+    
+    // Split into words
+    const transcriptWords = cleanTranscript.split(/\s+/).filter(w => w.length > 0);
+    const keywordWords = cleanKeyword.split(/\s+/).filter(w => w.length > 0);
+    const kwLength = keywordWords.length;
+    
+    if (transcriptWords.length < kwLength) return { matched: false };
+    
+    const kwSoundex = keywordWords.map(getSoundex).filter(x => x.length > 0);
+    
+    // Sliding window of words
+    for (let i = 0; i <= transcriptWords.length - kwLength; i++) {
+        const windowWords = transcriptWords.slice(i, i + kwLength);
+        const windowStr = windowWords.join(' ');
+        
+        // Check Levenshtein similarity (threshold >= 0.65 for high tolerance)
+        const dist = levenshtein(windowStr, cleanKeyword);
+        const maxLen = Math.max(windowStr.length, cleanKeyword.length);
+        const similarity = maxLen === 0 ? 1 : 1 - (dist / maxLen);
+        
+        if (similarity >= 0.65) {
+            return { matched: true, reason: `fuzzy similarity (${Math.round(similarity * 100)}%)` };
+        }
+        
+        // Check Soundex phonetic match
+        const windowSoundex = windowWords.map(getSoundex);
+        let soundexMatch = true;
+        for (let j = 0; j < kwLength; j++) {
+            if (!kwSoundex[j] || windowSoundex[j] !== kwSoundex[j]) {
+                soundexMatch = false;
+                break;
+            }
+        }
+        if (soundexMatch && kwSoundex.length > 0) {
+            return { matched: true, reason: `phonetic matching (soundex)` };
+        }
+    }
+    
+    return { matched: false };
+}
+
 class AudioDetector {
     constructor(emergencySystem) {
         this.emergencySystem = emergencySystem;
         this.isListening = false;
         this.recognition = null;
-        this.targetKeyword = 'help'; // Default
+        this.targetKeyword = 'mathew'; // Default
         this.audioContext = null; // For volume meter
         this.mediaStream = null;
 
@@ -74,24 +171,23 @@ class AudioDetector {
                         // 0. Validate Keyword
                         if (!this.targetKeyword || this.targetKeyword.trim().length < 2) continue;
 
-                        // 1. Check Confidence (STRICT: 0.85)
-                        const isHighConfidence = confidence >= 0.85;
+                        // 1. Check Confidence (Changed to 0.30 as requested)
+                        const isHighConfidence = confidence >= 0.30;
 
-                        // 2. Word Boundary Check
-                        const escapedKeyword = this.targetKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const keywordRegex = new RegExp(`\\b${escapedKeyword}\\b`, 'i');
+                        // 2. Perform Exact, Fuzzy, and Phonetic Check
+                        const matchResult = isFuzzyMatch(transcript, this.targetKeyword);
 
-                        if (keywordRegex.test(transcript)) {
+                        if (matchResult.matched) {
                             const now = Date.now();
 
                             if (isHighConfidence) {
-                                // CASE A: HIGH CONFIDENCE MATCH -> TRIGGER IMMEDIATELY
-                                console.warn('CONFIRMED MATCH (High Confidence):', this.targetKeyword);
-                                transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED: ${this.targetKeyword.toUpperCase()}</div>`;
+                                // CASE A: HIGH CONFIDENCE MATCH (>= 30%) -> TRIGGER IMMEDIATELY
+                                console.warn(`CONFIRMED MATCH via ${matchResult.reason}:`, this.targetKeyword);
+                                transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED (${matchResult.reason}): ${this.targetKeyword.toUpperCase()}</div>`;
                                 this.stopListening(true);
                                 this.emergencySystem.triggerEmergency('voice_keyword_confirmed');
                             } else {
-                                // CASE B: LOW CONFIDENCE -> REQUIRE SECOND MATCH WITHIN 10 SECONDS
+                                // CASE B: VERY LOW CONFIDENCE (< 30%) -> REQUIRE SECOND MATCH WITHIN 10 SECONDS
                                 if (now - this.lastMatchTime < 10000) {
                                     this.matchCount++;
                                 } else {
@@ -100,8 +196,8 @@ class AudioDetector {
                                 this.lastMatchTime = now;
 
                                 if (this.matchCount >= 2) {
-                                    console.warn('CONFIRMED MATCH (Double Match):', this.targetKeyword);
-                                    transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED (2nd Match): ${this.targetKeyword.toUpperCase()}</div>`;
+                                    console.warn(`CONFIRMED MATCH via ${matchResult.reason} (Double Match):`, this.targetKeyword);
+                                    transcriptDiv.innerHTML += `<div class="text-success fw-bold">🛡️ CONFIRMED (2nd Match - ${matchResult.reason}): ${this.targetKeyword.toUpperCase()}</div>`;
                                     this.stopListening(true);
                                     this.emergencySystem.triggerEmergency('voice_keyword_confirmed_double');
                                 } else {
@@ -137,7 +233,7 @@ class AudioDetector {
 
     updateKeyword(word) {
         const oldKeyword = this.targetKeyword;
-        this.targetKeyword = word.toLowerCase();
+        this.targetKeyword = word.toLowerCase().trim();
         console.log('Keyword updated to:', this.targetKeyword);
 
         // If it changed while listening, we might need to reset recognition
